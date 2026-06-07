@@ -9,7 +9,6 @@ export class UploadService {
 
   constructor(
     private configService: ConfigService,
-    // 1. INJECT StorageObjectsService VÀO ĐÂY ĐỂ SỬ DỤNG
     private storageObjectsService: StorageObjectsService 
   ) {
     const endPoint = this.configService.get<string>('S3_ENDPOINT') || '';
@@ -46,25 +45,21 @@ export class UploadService {
       console.log('\n[NAS UPLOAD - BƯỚC 3] Đang gọi API Minio (putObject) để truyền dữ liệu...');
       console.log('⏳ Vui lòng đợi trong giây lát... (Nếu bị kẹt lâu ở đây, có thể do mạng hoặc kích thước file)');
       
-      // 1. Đẩy file lên NAS (Dùng Buffer)
       await this.minioClient.putObject(
         bucketName,
         fileName,
-        file.buffer, // Truyền trực tiếp cục buffer lên
+        file.buffer,
         file.size,
         { 'Content-Type': file.mimetype }
       );
 
-      console.log('\n[NAS UPLOAD - BƯỚC 4] 🟢 Đẩy dữ liệu lên NAS thành công! Đang tạo Presigned URL...');
+      console.log('\n[NAS UPLOAD - BƯỚC 4]  Đẩy dữ liệu lên NAS thành công! Đang tạo Presigned URL...');
 
-      // 2. Tạo link tạm thời để xem/tải file (Link sống 24 giờ)
       const expiryTime = 24 * 60 * 60; 
       const presignedUrl = await this.minioClient.presignedGetObject(bucketName, fileName, expiryTime);
 
       console.log('\n[NAS UPLOAD - BƯỚC 5] Đang lưu thông tin vào Database...');
       
-      // 3. GỌI FUNCTION CREATE TỪ StorageObjectsService ĐỂ LƯU DB
-      // Các key đã được đổi tên để khớp 100% với file entity của Database
       const savedObject = await this.storageObjectsService.create({
         bucketName: bucketName,
         objectKey: fileName,
@@ -73,29 +68,28 @@ export class UploadService {
         fileSize: file.size,
       });
 
-      console.log('\n[NAS UPLOAD - BƯỚC 6] 🎉 HOÀN TẤT TRỌN VẸN!');
+      console.log('\n[NAS UPLOAD - BƯỚC 6]  HOÀN TẤT TRỌN VẸN!');
       console.log('===================================================\n');
 
       return {
         success: true,
         message: 'Đã đẩy file lên NAS RustFS và lưu Database thành công!',
-        data: savedObject, // <-- Trả về bản ghi DB đầy đủ dữ liệu
+        data: savedObject,
         fileName: fileName,
         url: presignedUrl, 
       };
 
     } catch (error: any) {
-      console.error('\n[NAS UPLOAD - 💥 THẤT BẠI] Quá trình upload bị đứt gãy!');
+      console.error('\n[NAS UPLOAD - THẤT BẠI] Quá trình upload bị đứt gãy!');
       console.error('- Loại lỗi (Name):', error.name);
       console.error('- Mã lỗi (Code):', error.code);
       console.error('- Lời nhắn (Message):', error.message);
       
-      // CHUẨN ĐOÁN LỖI ECONNRESET THEO LOGIC MỚI
       if (error.code === 'ECONNRESET') {
-        console.error('\n💡 CHUẨN ĐOÁN ĐẶC BIỆT (ECONNRESET): NAS hoặc mạng đã chủ động ngắt kết nối.');
-        console.error('👉 Khả năng 1: Do bạn đang đẩy file trực tiếp bằng `file.buffer` (đẩy toàn bộ 1 cục to vào mạng), NAS không kịp nuốt nên nó ngắt.');
-        console.error('👉 Khả năng 2: Bạn khai báo S3_ENDPOINT bị sai (có chứa chữ http:// ở trong biến môi trường không? S3_ENDPOINT chỉ nhận IP hoặc Domain trần).');
-        console.error('👉 Khả năng 3: Port 9000 trên NAS đang bị tường lửa chặn.');
+        console.error('\n CHUẨN ĐOÁN ĐẶC BIỆT (ECONNRESET): NAS hoặc mạng đã chủ động ngắt kết nối.');
+        console.error(' Khả năng 1: Do bạn đang đẩy file trực tiếp bằng `file.buffer` (đẩy toàn bộ 1 cục to vào mạng), NAS không kịp nuốt nên nó ngắt.');
+        console.error(' Khả năng 2: Bạn khai báo S3_ENDPOINT bị sai (có chứa chữ http:// ở trong biến môi trường không? S3_ENDPOINT chỉ nhận IP hoặc Domain trần).');
+        console.error(' Khả năng 3: Port 9000 trên NAS đang bị tường lửa chặn.');
       }
 
       console.log('===================================================\n');
@@ -103,7 +97,6 @@ export class UploadService {
     }
   }
 
-  // Cập nhật dòng này: thêm "| null"
   async getFileUrl(fileName: string): Promise<string | null> {
     try {
       const bucketName = this.configService.get<string>('S3_BUCKET') || 'meeting-pipeline';
@@ -111,7 +104,7 @@ export class UploadService {
       return await this.minioClient.presignedGetObject(bucketName, fileName, expiryTime);
     } catch (error: any) {
       console.error(`[NAS] Lỗi khi tạo link cho file ${fileName}:`, error.message);
-      return null; // Bây giờ return null sẽ hợp lệ
+      return null;
     }
   }
 }

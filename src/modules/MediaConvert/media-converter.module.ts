@@ -3,6 +3,6 @@ import { MediaConverterService } from './media-converter.service';
 
 @Module({
   providers: [MediaConverterService],
-  exports: [MediaConverterService], // Xuất ra để AudioUploadsModule dùng
+  exports: [MediaConverterService], 
 })
 export class MediaConverterModule {}

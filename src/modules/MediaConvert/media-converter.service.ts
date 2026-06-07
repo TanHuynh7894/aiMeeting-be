@@ -1,9 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-// ĐÃ FIX LỖI IMPORT Ở DÒNG DƯỚI NÀY
 import ffmpeg = require('fluent-ffmpeg'); 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 
 @Injectable()
 export class MediaConverterService {
@@ -11,22 +9,32 @@ export class MediaConverterService {
   async convertToWav(file: Express.Multer.File): Promise<Express.Multer.File> {
     console.log('\n[CONVERTER] 🔄 Bắt đầu quá trình convert sang .WAV...');
     
-    // Tạo đường dẫn file tạm thời trong thư mục Temp của hệ điều hành
-    const tempInputPath = path.join(os.tmpdir(), `input-${Date.now()}-${file.originalname}`);
-    const tempOutputPath = path.join(os.tmpdir(), `output-${Date.now()}.wav`);
+    // 1. Tạo thư mục temp ngay tại thư mục gốc của dự án thay vì dùng Temp của hệ điều hành
+    const tempDir = path.join(process.cwd(), 'temp');
+    await fs.mkdir(tempDir, { recursive: true });
+
+    // 2. CHUẨN HÓA ĐƯỜNG DẪN: Đổi toàn bộ dấu \ thành / để tránh lỗi kí tự escape trên Windows
+    const tempInputPath = path.join(tempDir, `input-${Date.now()}-${file.originalname}`).replace(/\\/g, '/');
+    const tempOutputPath = path.join(tempDir, `output-${Date.now()}.wav`).replace(/\\/g, '/');
 
     try {
-      // 1. Lưu cục Buffer của file gốc thành file thật trên ổ cứng để FFmpeg đọc
+      // Lưu cục Buffer của file gốc thành file thật trên ổ cứng để FFmpeg đọc
       await fs.writeFile(tempInputPath, file.buffer);
-      console.log(`[CONVERTER] ⏳ Đang nén và chuyển đổi định dạng (có thể mất vài giây với Video nặng)...`);
+      console.log(`[CONVERTER] ⏳ Đang bóc tách audio và chuyển đổi định dạng bằng FFmpeg...`);
 
-      // 2. Gọi FFmpeg để convert
+      // 3. Gọi FFmpeg xử lý với đường dẫn đã được chuẩn hóa tuyệt đối
       await new Promise((resolve, reject) => {
         ffmpeg(tempInputPath)
-          .toFormat('wav')
-          .audioChannels(1) // Đưa về Mono (1 channel) để file nhẹ hơn và AI dễ nhận diện giọng nói
-          .audioFrequency(16000) // Đưa về tần số 16kHz (Chuẩn tối ưu cho Speech-to-Text)
-          .on('end', () => resolve(true))
+          .outputOptions('-y')      // Ép ghi đè file output nếu đã tồn tại
+          .noVideo()                // Loại bỏ hoàn toàn luồng hình ảnh video, chỉ lấy tiếng
+          .toFormat('wav')          // Ép định dạng vỏ bọc là WAV
+          .audioCodec('pcm_s16le')  // Ép định dạng lõi âm thanh PCM 16-bit cực chuẩn cho WAV
+          .audioChannels(1)         // Đưa về Mono (1 channel) giúp file nhẹ và tối ưu cho AI
+          .audioFrequency(16000)    // Đặt tần số lấy mẫu 16kHz (Chuẩn vàng cho Speech-to-Text)
+          .on('end', () => {
+            console.log('[CONVERTER] FFmpeg đã hoàn tất xử lý file thành công.');
+            resolve(true);
+          })
           .on('error', (err: any) => {
             console.error('[CONVERTER - LỖI FFmpeg]:', err.message);
             reject(err);
@@ -34,19 +42,19 @@ export class MediaConverterService {
           .save(tempOutputPath);
       });
 
-      // 3. Đọc file .WAV vừa tạo ra thành cục Buffer mới
+      // 4. Đọc file .WAV kết quả thành cục Buffer mới
       const wavBuffer = await fs.readFile(tempOutputPath);
 
-      // 4. Xóa rác (Xóa 2 file tạm để giải phóng ổ cứng)
+      // 5. Xóa ngay lập tức 2 file tạm để giải phóng không gian ổ cứng
       await fs.unlink(tempInputPath).catch(() => {});
       await fs.unlink(tempOutputPath).catch(() => {});
 
-      // Lấy tên file gốc bỏ đuôi cũ (vd: video.mp4 -> video)
+      // Lấy tên file gốc loại bỏ đuôi cũ
       const baseName = file.originalname.substring(0, file.originalname.lastIndexOf('.'));
 
-      console.log('[CONVERTER] ✅ Convert thành công! File đã sẵn sàng.');
+      console.log('[CONVERTER] ✅ Convert thành công! File đã sẵn sàng đẩy lên NAS.');
 
-      // 5. Trả về một Object "đóng giả" Express.Multer.File với dữ liệu mới
+      // 6. Trả về Object file mới với dữ liệu đã được làm sạch
       return {
         ...file,
         originalname: `${baseName}.wav`,
@@ -56,9 +64,10 @@ export class MediaConverterService {
       };
 
     } catch (error) {
-      // Xóa file tạm nếu giữa chừng bị lỗi
+      // Đảm bảo dọn dẹp file tạm nếu chẳng may xảy ra lỗi ở giữa quy trình
       await fs.unlink(tempInputPath).catch(() => {});
       await fs.unlink(tempOutputPath).catch(() => {});
+      console.error('[CONVERTER CRASH]:', error);
       throw new InternalServerErrorException('Lỗi hệ thống khi convert file sang định dạng WAV');
     }
   }

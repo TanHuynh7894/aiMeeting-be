@@ -27,13 +27,6 @@ export class VoiceSample {
   @Column({ name: 'sample_status', type: 'varchar', nullable: true })
   sampleStatus!: string;
 
-  @Column({ name: 'embedding_object_id', type: 'int', nullable: true })
-  embeddingObjectId!: number;
-
-  @ManyToOne(() => StorageObject)
-  @JoinColumn({ name: 'embedding_object_id' })
-  embeddingObject!: StorageObject;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }
