@@ -1,41 +1,41 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { AudioUploadsService } from './audio-uploads.service';
-import { CreateAudioUploadDto } from './dto/create-audio-upload.dto';
-import { UpdateAudioUploadDto } from './dto/update-audio-upload.dto';
 
 @ApiTags('Audio Uploads')
 @Controller('audio-uploads')
 export class AudioUploadsController {
   constructor(private readonly audioUploadsService: AudioUploadsService) {}
 
-  @Post()
-  @ApiOperation({ summary: 'Tạo mới Audio Upload' })
-  create(@Body() createAudioUploadDto: CreateAudioUploadDto) {
-    return this.audioUploadsService.create(createAudioUploadDto);
+  @Post('upload-meeting')
+  @ApiOperation({ summary: '1. UPLOAD FILE: Tải file audio/video lên NAS và lưu Database' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'File audio/video cần upload lên NAS (Bắt buộc)',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadMeeting(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Vui lòng đính kèm file media trong request!');
+    }
+    return await this.audioUploadsService.uploadMeeting(file);
   }
+
 
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách Audio Uploads' })
-  findAll() {
-    return this.audioUploadsService.findAll();
-  }
-
+  findAll() { return this.audioUploadsService.findAll(); }
   @Get(':id')
-  @ApiOperation({ summary: 'Lấy chi tiết Audio Upload' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.audioUploadsService.findOne(id);
-  }
-
-  @Patch(':id')
-  @ApiOperation({ summary: 'Cập nhật Audio Upload' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateAudioUploadDto: UpdateAudioUploadDto) {
-    return this.audioUploadsService.update(id, updateAudioUploadDto);
-  }
-
+  findOne(@Param('id', ParseIntPipe) id: number) { return this.audioUploadsService.findOne(id); }
   @Delete(':id')
-  @ApiOperation({ summary: 'Xóa Audio Upload' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.audioUploadsService.remove(id);
-  }
+  remove(@Param('id', ParseIntPipe) id: number) { return this.audioUploadsService.remove(id); }
 }

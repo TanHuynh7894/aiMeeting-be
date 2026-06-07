@@ -102,4 +102,16 @@ export class UploadService {
       throw new InternalServerErrorException('Lỗi hệ thống khi lưu trữ file');
     }
   }
+
+  // Cập nhật dòng này: thêm "| null"
+  async getFileUrl(fileName: string): Promise<string | null> {
+    try {
+      const bucketName = this.configService.get<string>('S3_BUCKET') || 'meeting-pipeline';
+      const expiryTime = 24 * 60 * 60; 
+      return await this.minioClient.presignedGetObject(bucketName, fileName, expiryTime);
+    } catch (error: any) {
+      console.error(`[NAS] Lỗi khi tạo link cho file ${fileName}:`, error.message);
+      return null; // Bây giờ return null sẽ hợp lệ
+    }
+  }
 }
