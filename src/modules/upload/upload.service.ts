@@ -1,12 +1,17 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as Minio from 'minio';
+import { StorageObjectsService } from '../../models/storage-objects/storage-objects.service';
 
 @Injectable()
 export class UploadService {
   private minioClient: Minio.Client;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    // 1. INJECT StorageObjectsService VÀO ĐÂY ĐỂ SỬ DỤNG
+    private storageObjectsService: StorageObjectsService 
+  ) {
     const endPoint = this.configService.get<string>('S3_ENDPOINT') || '';
     const port = parseInt(this.configService.get<string>('S3_PORT') || '9000', 10);
     
@@ -56,14 +61,27 @@ export class UploadService {
       const expiryTime = 24 * 60 * 60; 
       const presignedUrl = await this.minioClient.presignedGetObject(bucketName, fileName, expiryTime);
 
-      console.log('\n[NAS UPLOAD - BƯỚC 5] 🎉 HOÀN TẤT TRỌN VẸN!');
+      console.log('\n[NAS UPLOAD - BƯỚC 5] Đang lưu thông tin vào Database...');
+      
+      // 3. GỌI FUNCTION CREATE TỪ StorageObjectsService ĐỂ LƯU DB
+      // Các key đã được đổi tên để khớp 100% với file entity của Database
+      const savedObject = await this.storageObjectsService.create({
+        bucketName: bucketName,
+        objectKey: fileName,
+        originalFileName: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+      });
+
+      console.log('\n[NAS UPLOAD - BƯỚC 6] 🎉 HOÀN TẤT TRỌN VẸN!');
       console.log('===================================================\n');
 
       return {
         success: true,
-        message: 'Đã đẩy file lên NAS RustFS thành công!',
+        message: 'Đã đẩy file lên NAS RustFS và lưu Database thành công!',
+        data: savedObject, // <-- Trả về bản ghi DB đầy đủ dữ liệu
         fileName: fileName,
-        url: presignedUrl, // <-- Trả về link này cho Frontend dùng luôn
+        url: presignedUrl, 
       };
 
     } catch (error: any) {
