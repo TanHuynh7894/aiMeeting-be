@@ -27,6 +27,13 @@ export class VoiceSample {
   @Column({ name: 'sample_status', type: 'varchar', nullable: true })
   sampleStatus!: string;
 
+  @Column({ 
+    type: 'vector', 
+    dimension: 512,
+    nullable: true 
+  } as any)
+  embedding!: number[];
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

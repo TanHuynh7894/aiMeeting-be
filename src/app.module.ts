@@ -12,6 +12,7 @@ import { AudioSegmentsModule } from './models/audio-segments/audio-segments.modu
 import { TranscriptsModule } from './models/transcripts/transcripts.module';
 import { MeetingMinutesModule } from './models/meeting-minutes/meeting-minutes.module';
 import { EmailLogsModule } from './models/email-logs/email-logs.module';
+import { TaskDispatcherModule } from './modules/task-dispatcher/task-dispatcher.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { EmailLogsModule } from './models/email-logs/email-logs.module';
     TranscriptsModule,
     MeetingMinutesModule,
     EmailLogsModule,
+    TaskDispatcherModule,
   ],
   controllers: [AppController],
   providers: [AppService],
