@@ -9,16 +9,16 @@ export class UploadService {
 
   constructor(
     private configService: ConfigService,
-    private storageObjectsService: StorageObjectsService 
+    private storageObjectsService: StorageObjectsService
   ) {
     const endPoint = this.configService.get<string>('S3_ENDPOINT') || '';
     const port = parseInt(this.configService.get<string>('S3_PORT') || '9000', 10);
-    
+
     // LOG KIỂM TRA LÚC KHỞI ĐỘNG APP
     console.log('\n[NAS SYSTEM] Đang khởi tạo Minio Client...');
     console.log(`- EndPoint kết nối: ${endPoint}`);
     console.log(`- Port: ${port}`);
-    
+
     this.minioClient = new Minio.Client({
       endPoint: endPoint,
       port: port,
@@ -41,10 +41,10 @@ export class UploadService {
     try {
       console.log(`\n[NAS UPLOAD - BƯỚC 2] Chuẩn bị đẩy lên Bucket: [${bucketName}]`);
       console.log(`- Tên file lưu trên NAS: [${fileName}]`);
-      
+
       console.log('\n[NAS UPLOAD - BƯỚC 3] Đang gọi API Minio (putObject) để truyền dữ liệu...');
       console.log('⏳ Vui lòng đợi trong giây lát... (Nếu bị kẹt lâu ở đây, có thể do mạng hoặc kích thước file)');
-      
+
       await this.minioClient.putObject(
         bucketName,
         fileName,
@@ -55,11 +55,11 @@ export class UploadService {
 
       console.log('\n[NAS UPLOAD - BƯỚC 4]  Đẩy dữ liệu lên NAS thành công! Đang tạo Presigned URL...');
 
-      const expiryTime = 24 * 60 * 60; 
+      const expiryTime = 24 * 60 * 60;
       const presignedUrl = await this.minioClient.presignedGetObject(bucketName, fileName, expiryTime);
 
       console.log('\n[NAS UPLOAD - BƯỚC 5] Đang lưu thông tin vào Database...');
-      
+
       const savedObject = await this.storageObjectsService.create({
         bucketName: bucketName,
         objectKey: fileName,
@@ -76,7 +76,7 @@ export class UploadService {
         message: 'Đã đẩy file lên NAS RustFS và lưu Database thành công!',
         data: savedObject,
         fileName: fileName,
-        url: presignedUrl, 
+        url: presignedUrl,
       };
 
     } catch (error: any) {
@@ -84,7 +84,7 @@ export class UploadService {
       console.error('- Loại lỗi (Name):', error.name);
       console.error('- Mã lỗi (Code):', error.code);
       console.error('- Lời nhắn (Message):', error.message);
-      
+
       if (error.code === 'ECONNRESET') {
         console.error('\n CHUẨN ĐOÁN ĐẶC BIỆT (ECONNRESET): NAS hoặc mạng đã chủ động ngắt kết nối.');
         console.error(' Khả năng 1: Do bạn đang đẩy file trực tiếp bằng `file.buffer` (đẩy toàn bộ 1 cục to vào mạng), NAS không kịp nuốt nên nó ngắt.');
@@ -100,7 +100,7 @@ export class UploadService {
   async getFileUrl(fileName: string): Promise<string | null> {
     try {
       const bucketName = this.configService.get<string>('S3_BUCKET') || 'meeting-pipeline';
-      const expiryTime = 24 * 60 * 60; 
+      const expiryTime = 24 * 60 * 60;
       return await this.minioClient.presignedGetObject(bucketName, fileName, expiryTime);
     } catch (error: any) {
       console.error(`[NAS] Lỗi khi tạo link cho file ${fileName}:`, error.message);
