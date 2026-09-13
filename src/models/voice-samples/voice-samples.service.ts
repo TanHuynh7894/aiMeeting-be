@@ -15,7 +15,7 @@ export class VoiceSamplesService {
     private readonly voiceSampleRepo: Repository<VoiceSample>,
     private readonly uploadService: UploadService,
     private readonly mediaConverterService: MediaConverterService,
-  ) {}
+  ) { }
 
   // 1. Dành cho Python Worker gọi vào khi đã tính toán xong vector (Embedding)
   async saveEmbedding(id: number, embedding: number[]) {
@@ -25,7 +25,7 @@ export class VoiceSamplesService {
     // Cập nhật mảng vector và đổi trạng thái sang hoàn tất
     record.embedding = embedding;
     record.sampleStatus = 'COMPLETED';
-    
+
     return await this.voiceSampleRepo.save(record);
   }
 
@@ -33,10 +33,10 @@ export class VoiceSamplesService {
   async uploadVoiceSample(speakerId: number, file: Express.Multer.File) {
     try {
       console.log(`\n[VOICE SAMPLE] Bắt đầu xử lý file cho Speaker ID: ${speakerId}`);
-      
+
       // Convert sang WAV chuẩn 16kHz
       const wavFile = await this.mediaConverterService.convertToWav(file);
-      
+
       // Lấy thời lượng file
       let autoDuration = 0;
       try {
@@ -59,10 +59,10 @@ export class VoiceSamplesService {
       });
 
       const savedRecord = await this.voiceSampleRepo.save(newRecord);
-      
+
       // Lấy fileUrl trả về cùng record để Controller gửi sang RabbitMQ
       const fileUrl = await this.uploadService.getFileUrl(uploadResult.data.objectKey);
-      
+
       return { record: savedRecord, fileUrl };
     } catch (error) {
       console.error('[VOICE SAMPLE ERROR]', error);
@@ -92,7 +92,7 @@ export class VoiceSamplesService {
     });
 
     if (!record) throw new NotFoundException(`Không tìm thấy dữ liệu ID = ${id}`);
-    
+
     let freshUrl: string | null = null;
     if (record.storageObject?.objectKey) {
       freshUrl = await this.uploadService.getFileUrl(record.storageObject.objectKey);

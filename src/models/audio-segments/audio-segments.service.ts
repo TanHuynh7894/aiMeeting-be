@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import * as amqp from 'amqplib';
 import { AudioSegment } from './entities/audio-segment.entity';
 import { AudioUpload } from '../audio-uploads/entities/audio-upload.entity';
 import { CreateAudioSegmentDto } from './dto/create-audio-segment.dto';
@@ -42,7 +43,10 @@ export class AudioSegmentsService {
     }
 
     // Lấy presigned URL của file audio gốc từ Storage Service
-    const fileUrl = await this.uploadService.getFileUrl(audioUpload.storageObject.objectKey);
+    const fileUrl = await this.uploadService.getFileUrl(
+      audioUpload.storageObject.objectKey,
+      audioUpload.storageObject.bucketName,
+    );
 
     if (!fileUrl) {
       throw new InternalServerErrorException('Không lấy được URL file audio gốc từ Storage Service!');
@@ -99,7 +103,75 @@ export class AudioSegmentsService {
     }
   }
 
-  // 2. Nhận 1 file segment được cắt ra -> lưu vào Storage Service -> lưu DB audio_segments
+  // 1b. Gửi task audioUpload sang RabbitMQ (Queue: RABBITMQ_QUEUE_AUDIO)
+  async sendToDiarizeQueue(audioUploadId: number) {
+    const audioUpload = await this.audioUploadRepo.findOne({
+      where: { id: audioUploadId },
+      relations: { storageObject: true },
+    });
+
+    if (!audioUpload) {
+      throw new NotFoundException(`Không tìm thấy AudioUpload với ID = ${audioUploadId}`);
+    }
+
+    if (!audioUpload.storageObject || !audioUpload.storageObject.objectKey) {
+      throw new BadRequestException(`AudioUpload ID = ${audioUploadId} chưa có thông tin storage_object!`);
+    }
+
+    const fileUrl = await this.uploadService.getFileUrl(
+      audioUpload.storageObject.objectKey,
+      audioUpload.storageObject.bucketName,
+    );
+
+    if (!fileUrl) {
+      throw new InternalServerErrorException('Không lấy được URL file audio gốc từ Storage Service!');
+    }
+
+    const rabbitUser = this.configService.get<string>('RABBITMQ_USER') || process.env.RABBITMQ_USER || 'admin';
+    const rabbitPassword = this.configService.get<string>('RABBITMQ_PASSWORD') || process.env.RABBITMQ_PASSWORD || '123@123AbcTH';
+    const rabbitHost = this.configService.get<string>('RABBITMQ_HOST') || process.env.RABBITMQ_HOST || '192.168.20.195';
+    const rabbitPort = this.configService.get<string>('RABBITMQ_PORT') || process.env.RABBITMQ_PORT || '5672';
+    const queueName = this.configService.get<string>('RABBITMQ_QUEUE_AUDIO') || process.env.RABBITMQ_QUEUE_AUDIO || 'diarization-audio';
+
+    const encodedPassword = encodeURIComponent(rabbitPassword);
+    const rabbitConnectionUrl = `amqp://${rabbitUser}:${encodedPassword}@${rabbitHost}:${rabbitPort}`;
+
+    try {
+      console.log(`[RabbitMQ Diarize] Đang kết nối tới ${rabbitHost}:${rabbitPort}...`);
+      const connection = await amqp.connect(rabbitConnectionUrl);
+      const channel = await connection.createChannel();
+
+      await channel.assertQueue(queueName, { durable: true });
+
+      const taskPayload = {
+        audio_upload_id: audioUploadId,
+        file_url: fileUrl,
+      };
+
+      channel.sendToQueue(queueName, Buffer.from(JSON.stringify(taskPayload)), { persistent: true });
+      console.log(`[RabbitMQ Diarize] Thành công! Đã đẩy task audioUploadId: ${audioUploadId} vào hàng đợi [${queueName}].`);
+
+      setTimeout(() => {
+        channel.close();
+        connection.close();
+      }, 500);
+
+      audioUpload.processingStatus = 'DIARIZING';
+      await this.audioUploadRepo.save(audioUpload);
+
+      return {
+        success: true,
+        message: `Đã đẩy task của AudioUpload ID ${audioUploadId} vào hàng đợi RabbitMQ [${queueName}] thành công!`,
+        audioUploadId: audioUploadId,
+        queue: queueName,
+      };
+    } catch (error: any) {
+      console.error(`[RabbitMQ Error] Không thể đẩy task vào hàng đợi:`, error);
+      throw new InternalServerErrorException(`Lỗi khi kết nối hoặc gửi task sang RabbitMQ: ${error.message}`);
+    }
+  }
+
+  // 2. Nhận 1 file segment được cắt ra -> lưu vào Storage Service (S3_BUCKET_DIARIZE) -> lưu DB audio_segments
   async uploadSegmentFile(
     audioUploadId: number,
     file: Express.Multer.File,
@@ -115,8 +187,14 @@ export class AudioSegmentsService {
 
     console.log(`\n[AUDIO SEGMENT] Lưu segment file cho AudioUpload ID: ${audioUploadId}...`);
 
-    // Lưu file vào NAS qua UploadService
-    const uploadResult = await this.uploadService.uploadFile(file);
+    // Target Bucket từ S3_BUCKET_DIARIZE env
+    const targetBucket =
+      this.configService.get<string>('S3_BUCKET_DIARIZE') ||
+      process.env.S3_BUCKET_DIARIZE ||
+      'meeting-diarize';
+
+    // Lưu file vào NAS qua UploadService với targetBucket
+    const uploadResult = await this.uploadService.uploadFile(file, targetBucket);
 
     if (!uploadResult.success || !uploadResult.data) {
       throw new InternalServerErrorException('Lỗi: Không thể lưu file segment vào Storage Service');
@@ -173,9 +251,22 @@ export class AudioSegmentsService {
   }
 
   async findAll() {
-    return await this.audioSegmentRepo.find({
+    const records = await this.audioSegmentRepo.find({
       relations: { audioUpload: true, segmentStorageObject: true },
     });
+
+    return await Promise.all(
+      records.map(async (record) => {
+        let freshUrl: string | null = null;
+        if (record.segmentStorageObject?.objectKey) {
+          freshUrl = await this.uploadService.getFileUrl(
+            record.segmentStorageObject.objectKey,
+            record.segmentStorageObject.bucketName,
+          );
+        }
+        return { ...record, url: freshUrl };
+      }),
+    );
   }
 
   async findOne(id: number) {
@@ -184,7 +275,15 @@ export class AudioSegmentsService {
       relations: { audioUpload: true, segmentStorageObject: true },
     });
     if (!record) throw new NotFoundException(`Không tìm thấy dữ liệu ID = ${id}`);
-    return record;
+
+    let freshUrl: string | null = null;
+    if (record.segmentStorageObject?.objectKey) {
+      freshUrl = await this.uploadService.getFileUrl(
+        record.segmentStorageObject.objectKey,
+        record.segmentStorageObject.bucketName,
+      );
+    }
+    return { ...record, url: freshUrl };
   }
 
   async update(id: number, updateDto: UpdateAudioSegmentDto) {

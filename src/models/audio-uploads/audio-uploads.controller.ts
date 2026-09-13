@@ -6,7 +6,7 @@ import { AudioUploadsService } from './audio-uploads.service';
 @ApiTags('Audio Uploads')
 @Controller('audio-uploads')
 export class AudioUploadsController {
-  constructor(private readonly audioUploadsService: AudioUploadsService) {}
+  constructor(private readonly audioUploadsService: AudioUploadsService) { }
 
   @Post('upload-meeting')
   @ApiOperation({ summary: '1. UPLOAD FILE: Tải file audio/video lên NAS và lưu Database' })

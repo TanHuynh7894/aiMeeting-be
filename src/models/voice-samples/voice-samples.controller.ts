@@ -1,6 +1,6 @@
-import { 
-  Controller, Get, Post, Body, Patch, Param, Delete, 
-  ParseIntPipe, UseInterceptors, UploadedFile, BadRequestException 
+import {
+  Controller, Get, Post, Body, Patch, Param, Delete,
+  ParseIntPipe, UseInterceptors, UploadedFile, BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -53,20 +53,20 @@ export class VoiceSamplesController {
       console.log(`[RabbitMQ] Đang kết nối tới ${rabbitHost}:${rabbitPort}...`);
       const connection = await amqp.connect(rabbitConnectionUrl);
       const channel = await connection.createChannel();
-      
+
       // Đảm bảo queue tồn tại
       await channel.assertQueue(queueName, { durable: true });
 
       // Đóng gói dữ liệu gửi đi
       const taskPayload = {
         sample_id: record.id,
-        file_url: fileUrl 
+        file_url: fileUrl
       };
 
       // Đẩy vào hàng đợi
       channel.sendToQueue(queueName, Buffer.from(JSON.stringify(taskPayload)), { persistent: true });
       console.log(`[RabbitMQ] Thành công! Đã đẩy task xử lý audio ID: ${record.id} vào hàng đợi.`);
-      
+
       // Đóng kết nối sau khi gửi xong
       setTimeout(() => {
         channel.close();

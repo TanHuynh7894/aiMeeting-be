@@ -28,14 +28,14 @@ export class UploadService {
     });
   }
 
-  async uploadFile(file: Express.Multer.File) {
+  async uploadFile(file: Express.Multer.File, targetBucket?: string) {
     console.log('\n===================================================');
     console.log('[NAS UPLOAD - BƯỚC 1] Nhận yêu cầu upload file từ Client');
     console.log(`- Tên file gốc: ${file.originalname}`);
     console.log(`- Kích thước: ${file.size} bytes (~ ${(file.size / 1024 / 1024).toFixed(2)} MB)`);
     console.log(`- Mimetype: ${file.mimetype}`);
 
-    const bucketName = this.configService.get<string>('S3_BUCKET') || 'meeting-pipeline';
+    const bucketName = targetBucket || this.configService.get<string>('S3_BUCKET') || 'meeting-pipeline';
     const fileName = `${Date.now()}-${file.originalname}`;
 
     try {
@@ -97,9 +97,9 @@ export class UploadService {
     }
   }
 
-  async getFileUrl(fileName: string): Promise<string | null> {
+  async getFileUrl(fileName: string, targetBucket?: string): Promise<string | null> {
     try {
-      const bucketName = this.configService.get<string>('S3_BUCKET') || 'meeting-pipeline';
+      const bucketName = targetBucket || this.configService.get<string>('S3_BUCKET') || 'meeting-pipeline';
       const expiryTime = 24 * 60 * 60;
       return await this.minioClient.presignedGetObject(bucketName, fileName, expiryTime);
     } catch (error: any) {
