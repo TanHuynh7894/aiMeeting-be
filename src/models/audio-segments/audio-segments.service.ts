@@ -144,17 +144,17 @@ export class AudioSegmentsService {
       await channel.assertQueue(queueName, { durable: true });
 
       const taskPayload = {
+        audio_id: audioUploadId,
         audio_upload_id: audioUploadId,
+        task_id: audioUploadId,
         file_url: fileUrl,
       };
 
       channel.sendToQueue(queueName, Buffer.from(JSON.stringify(taskPayload)), { persistent: true });
       console.log(`[RabbitMQ Diarize] Thành công! Đã đẩy task audioUploadId: ${audioUploadId} vào hàng đợi [${queueName}].`);
 
-      setTimeout(() => {
-        channel.close();
-        connection.close();
-      }, 500);
+      await channel.close();
+      await connection.close();
 
       audioUpload.processingStatus = 'DIARIZING';
       await this.audioUploadRepo.save(audioUpload);

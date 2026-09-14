@@ -67,11 +67,8 @@ export class VoiceSamplesController {
       channel.sendToQueue(queueName, Buffer.from(JSON.stringify(taskPayload)), { persistent: true });
       console.log(`[RabbitMQ] Thành công! Đã đẩy task xử lý audio ID: ${record.id} vào hàng đợi.`);
 
-      // Đóng kết nối sau khi gửi xong
-      setTimeout(() => {
-        channel.close();
-        connection.close();
-      }, 500);
+      await channel.close();
+      await connection.close();
 
     } catch (error) {
       console.error(`[RabbitMQ Error] Không thể đẩy task vào hàng đợi:`, error);

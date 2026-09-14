@@ -13,6 +13,7 @@ import { TranscriptsModule } from './models/transcripts/transcripts.module';
 import { MeetingMinutesModule } from './models/meeting-minutes/meeting-minutes.module';
 import { EmailLogsModule } from './models/email-logs/email-logs.module';
 import { TaskDispatcherModule } from './modules/task-dispatcher/task-dispatcher.module';
+import { AudioUploadSpeakersModule } from './models/audio-upload-speakers/audio-upload-speakers.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { TaskDispatcherModule } from './modules/task-dispatcher/task-dispatcher.
     MeetingMinutesModule,
     EmailLogsModule,
     TaskDispatcherModule,
+    AudioUploadSpeakersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

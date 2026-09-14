@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { AudioUploadSpeaker } from '../../audio-upload-speakers/entities/audio-upload-speaker.entity';
 
 @Entity('speakers')
 export class Speaker {
@@ -19,4 +20,7 @@ export class Speaker {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
+
+  @OneToMany(() => AudioUploadSpeaker, (aus) => aus.speaker)
+  audioUploadSpeakers!: AudioUploadSpeaker[];
 }
