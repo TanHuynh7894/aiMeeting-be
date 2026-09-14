@@ -32,4 +32,7 @@ export class AudioSegment {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
+
+  @Column({ name: 'person', type: 'varchar', nullable: true })
+  person!: string;
 }

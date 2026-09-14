@@ -19,7 +19,7 @@ export class AudioSegmentsService {
     private readonly audioUploadRepo: Repository<AudioUpload>,
     private readonly uploadService: UploadService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   // 1. Nhận audioUploadId, lấy storage_object_id -> gửi file tới WK_DIARIZE_URL
   async create(createDto: CreateAudioSegmentDto | { audioUploadId: number }) {
@@ -297,4 +297,83 @@ export class AudioSegmentsService {
     await this.audioSegmentRepo.remove(record);
     return { message: `Đã xóa thành công ID = ${id}` };
   }
-}
+
+  async getSegmentDetailWithSpeakers(audioUploadId: number, audioSegmentId: number) {
+    const segment = await this.audioSegmentRepo.findOne({
+      where: { id: audioSegmentId, audioUploadId },
+      relations: { segmentStorageObject: true, audioUpload: true },
+    });
+
+    if (!segment) {
+      throw new NotFoundException(
+        `Không tìm thấy AudioSegment với ID = ${audioSegmentId} thuộc AudioUpload ID = ${audioUploadId}`,
+      );
+    }
+
+    let segmentUrl: string | null = null;
+    if (segment.segmentStorageObject?.objectKey) {
+      segmentUrl = await this.uploadService.getFileUrl(
+        segment.segmentStorageObject.objectKey,
+        segment.segmentStorageObject.bucketName,
+      );
+    }
+
+    const audioUpload = await this.audioUploadRepo.findOne({
+      where: { id: audioUploadId },
+      relations: {
+        audioUploadSpeakers: {
+          speaker: {
+            voiceSamples: {
+              storageObject: true,
+            },
+          },
+        },
+      },
+    });
+
+    const speakers = await Promise.all(
+      (audioUpload?.audioUploadSpeakers || []).map(async (aus) => {
+        const speakerObj = aus.speaker;
+        let voiceSamplesWithUrls: any[] = [];
+        if (speakerObj && speakerObj.voiceSamples) {
+          voiceSamplesWithUrls = await Promise.all(
+            speakerObj.voiceSamples.map(async (vs) => {
+              let vsUrl: string | null = null;
+              if (vs.storageObject?.objectKey) {
+                vsUrl = await this.uploadService.getFileUrl(
+                  vs.storageObject.objectKey,
+                  vs.storageObject.bucketName,
+                );
+              }
+              return {
+                ...vs,
+                url: vsUrl,
+              };
+            }),
+          );
+        }
+
+        return {
+          speakerId: aus.speakerId,
+          speaker: {
+            ...speakerObj,
+            voiceSamples: voiceSamplesWithUrls,
+          },
+          linkedAt: aus.createdAt,
+        };
+      }),
+    );
+
+    return {
+      success: true,
+      audioUploadId,
+      audioSegmentId,
+      audioSegment: {
+        ...segment,
+        url: segmentUrl,
+      },
+      speakersCount: speakers.length,
+      speakers,
+    };
+  }
+}

@@ -32,6 +32,12 @@ export class AudioUploadsController {
   }
 
 
+  @Get('analysis/:id')
+  @ApiOperation({ summary: 'Phân tích tổng hợp: Thông tin Audio Upload, Speakers liên kết & Audio Segments' })
+  getAnalysisByPath(@Param('id', ParseIntPipe) id: number) {
+    return this.audioUploadsService.getAnalysis(id);
+  }
+
   @Get()
   findAll() { return this.audioUploadsService.findAll(); }
   @Get(':id')

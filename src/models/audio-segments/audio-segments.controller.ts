@@ -1,9 +1,9 @@
 import {
-  Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe,
+  Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query,
   UseInterceptors, UploadedFile, UploadedFiles, BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { AudioSegmentsService } from './audio-segments.service';
 import { CreateAudioSegmentDto } from './dto/create-audio-segment.dto';
 import { UpdateAudioSegmentDto } from './dto/update-audio-segment.dto';
@@ -12,6 +12,26 @@ import { UpdateAudioSegmentDto } from './dto/update-audio-segment.dto';
 @Controller('audio-segments')
 export class AudioSegmentsController {
   constructor(private readonly audioSegmentsService: AudioSegmentsService) { }
+
+  @Get('segment-detail')
+  @ApiOperation({ summary: 'Lấy chi tiết Audio Segment & Voice Samples của Speakers theo audioUploadId và audioSegmentId (Query Params)' })
+  @ApiQuery({ name: 'audioUploadId', type: Number, example: 1 })
+  @ApiQuery({ name: 'audioSegmentId', type: Number, example: 1 })
+  getSegmentDetailByQuery(
+    @Query('audioUploadId', ParseIntPipe) audioUploadId: number,
+    @Query('audioSegmentId', ParseIntPipe) audioSegmentId: number,
+  ) {
+    return this.audioSegmentsService.getSegmentDetailWithSpeakers(audioUploadId, audioSegmentId);
+  }
+
+  @Get('upload/:audioUploadId/segment/:audioSegmentId')
+  @ApiOperation({ summary: 'Lấy chi tiết Audio Segment & Voice Samples của Speakers theo audioUploadId và audioSegmentId (Path Params)' })
+  getSegmentDetailByPath(
+    @Param('audioUploadId', ParseIntPipe) audioUploadId: number,
+    @Param('audioSegmentId', ParseIntPipe) audioSegmentId: number,
+  ) {
+    return this.audioSegmentsService.getSegmentDetailWithSpeakers(audioUploadId, audioSegmentId);
+  }
 
   @Post()
   @ApiOperation({ summary: '1. Gửi Audio Upload tới Worker Diarize (WK_DIARIZE_URL)' })

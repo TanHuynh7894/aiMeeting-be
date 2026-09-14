@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { StorageObject } from '../../storage-objects/entities/storage-object.entity';
 import { AudioUploadSpeaker } from '../../audio-upload-speakers/entities/audio-upload-speaker.entity';
+import { AudioSegment } from '../../audio-segments/entities/audio-segment.entity';
 
 @Entity('audio_uploads')
 export class AudioUpload {
@@ -25,4 +26,7 @@ export class AudioUpload {
 
   @OneToMany(() => AudioUploadSpeaker, (aus) => aus.audioUpload)
   audioUploadSpeakers!: AudioUploadSpeaker[];
+
+  @OneToMany(() => AudioSegment, (segment) => segment.audioUpload)
+  audioSegments!: AudioSegment[];
 }

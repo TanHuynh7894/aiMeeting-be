@@ -53,12 +53,109 @@ export class AudioUploadsService {
     let freshUrl: string | null = null; 
     
     if (record.storageObject && record.storageObject.objectKey) {
-      freshUrl = await this.uploadService.getFileUrl(record.storageObject.objectKey);
+      freshUrl = await this.uploadService.getFileUrl(record.storageObject.objectKey, record.storageObject.bucketName);
     }
 
     return {
       ...record,
       url: freshUrl
+    };
+  }
+
+  async getAnalysis(id: number) {
+    const audioUpload = await this.audioUploadRepo.findOne({
+      where: { id },
+      relations: {
+        storageObject: true,
+        audioUploadSpeakers: {
+          speaker: {
+            voiceSamples: {
+              storageObject: true,
+            },
+          },
+        },
+        audioSegments: {
+          segmentStorageObject: true,
+        },
+      },
+    });
+
+    if (!audioUpload) {
+      throw new NotFoundException(`Không tìm thấy AudioUpload với ID = ${id}`);
+    }
+
+    let audioUrl: string | null = null;
+    if (audioUpload.storageObject?.objectKey) {
+      audioUrl = await this.uploadService.getFileUrl(
+        audioUpload.storageObject.objectKey,
+        audioUpload.storageObject.bucketName,
+      );
+    }
+
+    const speakers = await Promise.all(
+      (audioUpload.audioUploadSpeakers || []).map(async (aus) => {
+        const speakerObj = aus.speaker;
+        let voiceSamplesWithUrls: any[] = [];
+        if (speakerObj && speakerObj.voiceSamples) {
+          voiceSamplesWithUrls = await Promise.all(
+            speakerObj.voiceSamples.map(async (vs) => {
+              let vsUrl: string | null = null;
+              if (vs.storageObject?.objectKey) {
+                vsUrl = await this.uploadService.getFileUrl(
+                  vs.storageObject.objectKey,
+                  vs.storageObject.bucketName,
+                );
+              }
+              return {
+                ...vs,
+                url: vsUrl,
+              };
+            }),
+          );
+        }
+
+        return {
+          speakerId: aus.speakerId,
+          speaker: {
+            ...speakerObj,
+            voiceSamples: voiceSamplesWithUrls,
+          },
+          linkedAt: aus.createdAt,
+        };
+      }),
+    );
+
+    const audioSegments = await Promise.all(
+      (audioUpload.audioSegments || []).map(async (segment) => {
+        let segmentUrl: string | null = null;
+        if (segment.segmentStorageObject?.objectKey) {
+          segmentUrl = await this.uploadService.getFileUrl(
+            segment.segmentStorageObject.objectKey,
+            segment.segmentStorageObject.bucketName,
+          );
+        }
+        return {
+          ...segment,
+          url: segmentUrl,
+        };
+      }),
+    );
+
+    return {
+      success: true,
+      audioUpload: {
+        id: audioUpload.id,
+        storageObjectId: audioUpload.storageObjectId,
+        durationSeconds: audioUpload.durationSeconds,
+        processingStatus: audioUpload.processingStatus,
+        uploadedAt: audioUpload.uploadedAt,
+        storageObject: audioUpload.storageObject,
+        url: audioUrl,
+      },
+      speakersCount: speakers.length,
+      speakers,
+      audioSegmentsCount: audioSegments.length,
+      audioSegments,
     };
   }
 

@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { AudioUploadSpeaker } from '../../audio-upload-speakers/entities/audio-upload-speaker.entity';
+import { VoiceSample } from '../../voice-samples/entities/voice-sample.entity';
 
 @Entity('speakers')
 export class Speaker {
@@ -23,4 +24,7 @@ export class Speaker {
 
   @OneToMany(() => AudioUploadSpeaker, (aus) => aus.speaker)
   audioUploadSpeakers!: AudioUploadSpeaker[];
+
+  @OneToMany(() => VoiceSample, (vs) => vs.speaker)
+  voiceSamples!: VoiceSample[];
 }
