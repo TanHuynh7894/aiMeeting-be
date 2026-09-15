@@ -376,4 +376,109 @@ export class AudioSegmentsService {
       speakers,
     };
   }
+
+  async sendIdentificationTask(audioUploadId: number, audioSegmentId: number) {
+    const payload = await this.getSegmentDetailWithSpeakers(audioUploadId, audioSegmentId);
+
+    // 1. Đẩy toàn bộ JSON payload lên RabbitMQ (Queue: RABBITMQ_QUEUE_Identification)
+    const rabbitUser = this.configService.get<string>('RABBITMQ_USER') || process.env.RABBITMQ_USER || 'admin';
+    const rabbitPassword = this.configService.get<string>('RABBITMQ_PASSWORD') || process.env.RABBITMQ_PASSWORD || '123@123AbcTH';
+    const rabbitHost = this.configService.get<string>('RABBITMQ_HOST') || process.env.RABBITMQ_HOST || '192.168.20.195';
+    const rabbitPort = this.configService.get<string>('RABBITMQ_PORT') || process.env.RABBITMQ_PORT || '5672';
+    const queueName =
+      this.configService.get<string>('RABBITMQ_QUEUE_Identification') ||
+      process.env.RABBITMQ_QUEUE_Identification ||
+      'Identification';
+
+    let mqSuccess = false;
+    let mqError: string | null = null;
+
+    try {
+      const encodedPassword = encodeURIComponent(rabbitPassword);
+      const rabbitConnectionUrl = `amqp://${rabbitUser}:${encodedPassword}@${rabbitHost}:${rabbitPort}`;
+      console.log(`[RabbitMQ Identification] Đang kết nối tới ${rabbitHost}:${rabbitPort}...`);
+      const connection = await amqp.connect(rabbitConnectionUrl);
+      const channel = await connection.createChannel();
+
+      await channel.assertQueue(queueName, { durable: true });
+      channel.sendToQueue(queueName, Buffer.from(JSON.stringify(payload)), { persistent: true });
+      console.log(`[RabbitMQ Identification] Thành công! Đã đẩy JSON vào hàng đợi [${queueName}].`);
+
+      await channel.close();
+      await connection.close();
+      mqSuccess = true;
+    } catch (err: any) {
+      console.error(`[RabbitMQ Identification Error]:`, err?.message || err);
+      mqError = err?.message || String(err);
+    }
+
+    // 2. Gọi về Worker WK_Identification_URL truyền JSON payload này sang
+    const wkIdentificationUrl =
+      this.configService.get<string>('WK_Identification_URL') ||
+      process.env.WK_Identification_URL || "";
+
+    let workerResponse: any = null;
+    let workerSuccess = false;
+
+    try {
+      console.log(`[Worker Identification] Đang gửi POST JSON tới ${wkIdentificationUrl}...`);
+      const response = await axios.post(wkIdentificationUrl, payload, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      workerResponse = response.data;
+      workerSuccess = true;
+      console.log(`[Worker Identification] Phản hồi từ worker thành công:`, workerResponse);
+    } catch (err: any) {
+      console.error(`[Worker Identification Error]:`, err?.response?.data || err?.message || err);
+      workerResponse = err?.response?.data || { error: err?.message || String(err) };
+    }
+
+    return {
+      ...payload,
+      rabbitMq: {
+        queue: queueName,
+        sent: mqSuccess,
+        error: mqError,
+      },
+      worker: {
+        url: wkIdentificationUrl,
+        sent: workerSuccess,
+        response: workerResponse,
+      },
+    };
+  }
+
+  async sendAllIdentificationTasks(audioUploadId: number) {
+    const segments = await this.audioSegmentRepo.find({
+      where: { audioUploadId },
+      order: { id: 'ASC' },
+    });
+
+    if (!segments || segments.length === 0) {
+      throw new NotFoundException(
+        `Không tìm thấy bất kỳ AudioSegment nào thuộc AudioUpload ID = ${audioUploadId}`,
+      );
+    }
+
+    console.log(
+      `\n[IDENTIFY ALL] Tìm thấy ${segments.length} segments thuộc AudioUpload ID = ${audioUploadId}. Đang lần lượt xử lý...`,
+    );
+
+    const results: any[] = [];
+    for (const seg of segments) {
+      const result = await this.sendIdentificationTask(audioUploadId, seg.id);
+      results.push(result);
+    }
+
+    return {
+      success: true,
+      message: `Đã xử lý xong toàn bộ ${results.length} audio segments cho AudioUpload ID = ${audioUploadId}`,
+      audioUploadId,
+      totalSegments: segments.length,
+      processedCount: results.length,
+      results,
+    };
+  }
 }
+
+

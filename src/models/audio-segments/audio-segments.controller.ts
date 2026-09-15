@@ -25,12 +25,40 @@ export class AudioSegmentsController {
   }
 
   @Get('upload/:audioUploadId/segment/:audioSegmentId')
-  @ApiOperation({ summary: 'Lấy chi tiết Audio Segment & Voice Samples của Speakers theo audioUploadId và audioSegmentId (Path Params)' })
+  @ApiOperation({ summary: 'Gửi chi tiết Audio Segment & Voice Samples sang RabbitMQ (Identification) & Gọi Worker (WK_Identification_URL)' })
   getSegmentDetailByPath(
     @Param('audioUploadId', ParseIntPipe) audioUploadId: number,
     @Param('audioSegmentId', ParseIntPipe) audioSegmentId: number,
   ) {
-    return this.audioSegmentsService.getSegmentDetailWithSpeakers(audioUploadId, audioSegmentId);
+    return this.audioSegmentsService.sendIdentificationTask(audioUploadId, audioSegmentId);
+  }
+
+  @Post('upload/:audioUploadId/identify-all')
+  @ApiOperation({ summary: 'Tự động lấy tất cả AudioSegments thuộc audioUploadId và lần lượt gửi sang RabbitMQ & Worker (Path Param)' })
+  identifyAllByPath(
+    @Param('audioUploadId', ParseIntPipe) audioUploadId: number,
+  ) {
+    return this.audioSegmentsService.sendAllIdentificationTasks(audioUploadId);
+  }
+
+  @Post('identify-all')
+  @ApiOperation({ summary: 'Tự động lấy tất cả AudioSegments thuộc audioUploadId và lần lượt gửi sang RabbitMQ & Worker (Body JSON)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        audioUploadId: { type: 'number', example: 1 },
+      },
+    },
+  })
+  async identifyAllByBody(
+    @Body('audioUploadId') audioUploadIdInput: number | string,
+  ) {
+    if (!audioUploadIdInput) {
+      throw new BadRequestException('Vui lòng cung cấp audioUploadId!');
+    }
+    const audioUploadId = typeof audioUploadIdInput === 'string' ? parseInt(audioUploadIdInput, 10) : audioUploadIdInput;
+    return await this.audioSegmentsService.sendAllIdentificationTasks(audioUploadId);
   }
 
   @Post()
